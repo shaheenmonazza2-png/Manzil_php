@@ -20,7 +20,7 @@ function App() {
   const [password, setPassword] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('UPI');
 
-  const API_URL = 'http://localhost/manzil/api.php';
+  const API_URL = 'http://manzil-booking.rf.gd/api.php';
 
   const fetchHotels = async (searchLoc = location, searchCat = category) => {
     try {
