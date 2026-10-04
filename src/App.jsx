@@ -1,346 +1,238 @@
-// src/App.jsx
-
 import React, { useState, useEffect } from 'react';
-import { hotelsData } from './hotelsData';
-import { premiumStyles as styles } from './theme';
-
-// Hardcoded fake guest reviews for each hotel to enhance immersion
-const mockReviews = {
-  1: [ { user: "Aarav M.", text: "Absolutely phenomenal butler service. Worth every single rupee." }, { user: "Priya S.", text: "The ocean views from the grand palace suite are stunning." } ],
-  2: [ { user: "Kabir D.", text: "Pure paradise. The private beach access was magnificent." } ],
-  3: [ { user: "Neha Sharma", text: "Stunning historic Mughal architecture mixed with peak modern luxury." } ],
-  4: [ { user: "Rohan V.", text: "Snowy balcony views and warm cozy fireplaces. Loved the suite!" } ]
-};
+import './App.css';
 
 function App() {
-  // --- Core States ---
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [searchLocation, setSearchLocation] = useState('');
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
-  const [guests, setGuests] = useState({ adults: 1, children: 0 });
-  
-  const [filteredHotels, setFilteredHotels] = useState([]);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hotels, setHotels] = useState([]);
+  const [location, setLocation] = useState('');
+  const [category, setCategory] = useState('All');
   const [selectedHotel, setSelectedHotel] = useState(null);
   
-  // New State: Price Filtering Tag (All, Premium, Ultra-Luxury)
-  const [priceTier, setPriceTier] = useState('All');
-  
-  // Auth & Payment Portal Flow States
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [authForm, setAuthForm] = useState({ email: '', password: '' });
-  const [roomCount, setRoomCount] = useState(1);
-  const [bookingSuccess, setBookingSuccess] = useState(false);
+  // Booking form state
+  const [checkIn, setCheckIn] = useState('');
+  const [checkOut, setCheckOut] = useState('');
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
 
-  // --- 3-Second Automatic Slider Loop ---
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide((prevSlide) => (prevSlide + 1) % hotelsData.length);
-    }, 2000);
-    return () => clearInterval(timer);
-  }, []);
+  // Customer details state
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('UPI');
 
-  // --- Filter and Search Mechanics ---
-  const executeSearchAndFilter = (locationValue, tierValue) => {
-    let results = hotelsData;
+  const API_URL = 'http://localhost/manzil/api.php';
 
-    // Filter by location if something is typed
-    if (locationValue.trim()) {
-      results = results.filter(hotel => 
-        hotel.location.toLowerCase().includes(locationValue.toLowerCase())
-      );
+  const fetchHotels = async (searchLoc = location, searchCat = category) => {
+    try {
+      const res = await fetch(`${API_URL}?action=get_hotels&location=${encodeURIComponent(searchLoc)}&category=${encodeURIComponent(searchCat)}`);
+      const data = await res.json();
+      setHotels(data);
+    } catch (e) {
+      console.error("Failed to fetch hotels from PHP backend:", e);
     }
-
-    // Filter by Tier (Ultra Luxury is > 10,000 INR, Premium is <= 10,000 INR)
-    if (tierValue === 'Ultra-Luxury') {
-      results = results.filter(hotel => hotel.pricePerNight > 10000);
-    } else if (tierValue === 'Premium Stays') {
-      results = results.filter(hotel => hotel.pricePerNight <= 10000);
-    }
-
-    setFilteredHotels(results);
   };
+
+  useEffect(() => {
+    fetchHotels(location, category);
+  }, [category]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    if (!searchLocation.trim()) {
-      alert("Please specify a location.");
-      return;
-    }
-    executeSearchAndFilter(searchLocation, priceTier);
-    setHasSearched(true);
+    fetchHotels(location, category);
+    document.getElementById('hotel-listings')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleTierChange = (newTier) => {
-    setPriceTier(newTier);
-    if (hasSearched || searchLocation.trim()) {
-      executeSearchAndFilter(searchLocation, newTier);
-      setHasSearched(true);
-    }
+  const handleNavClick = (catName) => {
+    setCategory(catName);
+    fetchHotels(location, catName);
+    document.getElementById('hotel-listings')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // --- Sequential Booking Flow ---
-  const handleBookClick = () => {
-    if (!isLoggedIn) {
-      setShowAuthModal(true); // Step 1: Force User Login
-    } else {
-      setShowPaymentModal(true); // Step 2: Proceed to Checkout
-    }
-  };
-
-  const handleLoginSubmit = (e) => {
+  const handleBookingSubmit = async (e) => {
     e.preventDefault();
-    if (authForm.email && authForm.password) {
-      setIsLoggedIn(true);
-      setShowAuthModal(false);
-      setShowPaymentModal(true); // Open payment right after login completes
-    }
-  };
+    const bookingPayload = {
+      fullName, email, phone, password,
+      hotelId: selectedHotel.id,
+      checkIn: checkIn || new Date().toISOString().split('T')[0],
+      checkOut: checkOut || new Date().toISOString().split('T')[0],
+      adults, children,
+      totalPrice: selectedHotel.price_per_night,
+      paymentMethod
+    };
 
-  const handlePaymentSubmit = (e) => {
-    e.preventDefault();
-    setShowPaymentModal(false);
-    setBookingSuccess(true); // Final Step: Display success celebration!
+    try {
+      const res = await fetch(`${API_URL}?action=book_hotel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bookingPayload)
+      });
+      const result = await res.json();
+      alert(result.message);
+      if (result.status === 'success') {
+        setSelectedHotel(null);
+      }
+    } catch (e) {
+      alert('Error connecting to backend API.');
+    }
   };
 
   return (
-    <div style={styles.appContainer}>
-      
-      {/* 1. Classy Navbar Header */}
-      <header style={styles.header}>
-        <div style={styles.logoContainer}>
-          <img src="/manzil logo.jpg" alt="Manzil Logo" style={styles.logoImage} />
-          <h1 style={styles.logoText}>MANZIL</h1>
+    <div className="app-container">
+      <div className="promo-bar">
+        ✨ Exclusive Deal: Save up to <span>25% OFF</span> on your next luxury stay with MANZIL!
+      </div>
+
+      {/* Navbar */}
+      <nav className="navbar">
+        <div className="brand-logo" onClick={() => handleNavClick('All')}>
+          <i className="fa-solid fa-hotel"></i> Manzil
         </div>
-        
-        {isLoggedIn ? (
-          <span style={styles.userBadge}>Welcome back, Member ✨</span>
-        ) : (
-          <button style={styles.loginNavBtn} onClick={() => setShowAuthModal(true)}>Sign In</button>
-        )}
+        <ul className="nav-links">
+          <li className={category === 'All' ? 'active' : ''} onClick={() => handleNavClick('All')}>Home</li>
+          <li className={category === 'Luxury' ? 'active' : ''} onClick={() => handleNavClick('Luxury')}>Luxury Rooms</li>
+          <li className={category === 'Premium' ? 'active' : ''} onClick={() => handleNavClick('Premium')}>Premium Rooms</li>
+          <li onClick={() => document.getElementById('occasions')?.scrollIntoView({behavior:'smooth'})}>Special Occasions</li>
+        </ul>
+      </nav>
+
+      {/* Hero Banner */}
+      <header className="hero-section">
+        <h1>Find Your Stay, Find Your Manzil</h1>
+        <p>Discover heritage palaces, luxury villas, and scenic resorts across India.</p>
       </header>
 
-      {/* 2. Auto-Sliding Image Banner & Italicized Catchy Phrase */}
-      <div style={styles.heroWrapper}>
-        <div 
-          style={{
-            ...styles.heroSlide,
-            backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(5,11,20,1)), url(${hotelsData[currentSlide].image})`
-          }}
-        >
-          <div style={styles.heroContent}>
-            <p style={styles.tagline}>book your stay. Find your Manzil</p>
+      {/* Search Filter Box */}
+      <div className="search-container">
+        <form className="search-form" onSubmit={handleSearchSubmit}>
+          <div className="form-group">
+            <label><i className="fa-solid fa-location-dot"></i> Destination</label>
+            <input type="text" placeholder="City or Region" value={location} onChange={(e) => setLocation(e.target.value)} />
           </div>
-        </div>
-      </div>
-
-      {/* 3. Luxury Search Parameters & Tier Filters */}
-      <div style={styles.searchSection}>
-        <form onSubmit={handleSearchSubmit} style={styles.searchBar}>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Where to?</label>
-            <input 
-              type="text" placeholder="e.g., Mumbai, Goa, Delhi" value={searchLocation}
-              onChange={(e) => setSearchLocation(e.target.value)} style={styles.input} required
-            />
+          <div className="form-group">
+            <label><i className="fa-solid fa-calendar"></i> Check-In</label>
+            <input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} />
           </div>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Check-in</label>
-            <input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} style={styles.input} />
+          <div className="form-group">
+            <label><i className="fa-solid fa-calendar-check"></i> Check-Out</label>
+            <input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} />
           </div>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Check-out</label>
-            <input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} style={styles.input} />
+          <div className="form-group">
+            <label><i className="fa-solid fa-user"></i> Adults</label>
+            <select value={adults} onChange={(e) => setAdults(e.target.value)}>
+              <option value="1">1 Adult</option>
+              <option value="2">2 Adults</option>
+              <option value="3">3 Adults</option>
+            </select>
           </div>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Guests</label>
-            <div style={styles.guestInputs}>
-              <input 
-                type="number" min="1" value={guests.adults}
-                onChange={(e) => setGuests({...guests, adults: parseInt(e.target.value) || 1})}
-                style={{...styles.input, width: '45px'}}
-              />
-              <span style={{color: '#d4af37', alignSelf:'center', fontSize:'12px'}}>Adt</span>
-              <input 
-                type="number" min="0" value={guests.children}
-                onChange={(e) => setGuests({...guests, children: parseInt(e.target.value) || 0})}
-                style={{...styles.input, width: '45px', marginLeft: '5px'}}
-              />
-              <span style={{color: '#d4af37', alignSelf:'center', fontSize:'12px'}}>Chd</span>
-            </div>
-          </div>
-          <button type="submit" style={styles.searchButton}>Discover</button>
+          <button type="submit" className="btn-search"><i className="fa-solid fa-magnifying-glass"></i> Search</button>
         </form>
-
-        {/* Dynamic Category Tiers Selection */}
-        <div style={styles.filterWrapper}>
-          {['All Stays', 'Premium Stays', 'Ultra-Luxury'].map((tier) => (
-            <button 
-              key={tier}
-              onClick={() => handleTierChange(tier)}
-              style={priceTier === tier ? styles.filterBtnActive : styles.filterBtn}
-            >
-              {tier}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* 4. Database Search Results Card Grid */}
-      <main style={styles.mainContent}>
-        {hasSearched && (
-          <div>
-            <h2 style={styles.sectionTitle}>Available Luxury Stays ({priceTier})</h2>
-            {filteredHotels.length === 0 ? (
-              <p style={styles.noResults}>No properties found fitting your current parameters. Try adjusting your query.</p>
-            ) : (
-              <div style={styles.resultsGrid}>
-                {filteredHotels.map((hotel) => (
-                  <div key={hotel.id} style={styles.hotelCard} onClick={() => { setSelectedHotel(hotel); setRoomCount(1); setBookingSuccess(false); }}>
-                    <img src={hotel.image} alt={hotel.name} style={styles.cardImage} />
-                    <div style={styles.cardBody}>
-                      <div style={styles.cardHeaderRow}>
-                        <h3 style={styles.hotelName}>{hotel.name}</h3>
-                        <span style={styles.ratingBadge}>★ {hotel.rating}</span>
-                      </div>
-                      <p style={styles.hotelLocation}>📍 {hotel.location}</p>
-                      <p style={styles.hotelPrice}>₹{hotel.pricePerNight.toLocaleString('en-IN')} <span style={styles.perNight}>/ night</span></p>
-                      <button style={styles.viewDetailsBtn}>View Details</button>
-                    </div>
+      {/* Marquee Banner */}
+      <section className="marquee-section">
+        <h2 className="section-title">Trending Stays Across India</h2>
+        <div className="marquee-container">
+          <div className="marquee-card"><img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=600&q=80" /><div className="info">Taj Palace, Mumbai</div></div>
+          <div className="marquee-card"><img src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=600&q=80" /><div className="info">Oberoi Amarvilas, Agra</div></div>
+          <div className="marquee-card"><img src="https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=600&q=80" /><div className="info">Kumarakom Resort, Kerala</div></div>
+          <div className="marquee-card"><img src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=600&q=80" /><div className="info">The Elgin, Darjeeling</div></div>
+        </div>
+      </section>
+
+      {/* Hotel Listings Grid */}
+      <main className="main-container" id="hotel-listings">
+        <h2 className="section-title">{category === 'All' ? 'Featured Accommodations' : `${category} Accommodations`}</h2>
+        <div className="hotel-grid">
+          {hotels.length > 0 ? (
+            hotels.map((hotel) => (
+              <div key={hotel.id} className="hotel-card">
+                {hotel.discount_percent > 0 && <div className="badge-discount">{hotel.discount_percent}% OFF</div>}
+                <img src={hotel.image_url} alt={hotel.name} />
+                <div className="hotel-content">
+                  <div className="hotel-meta">
+                    <span><i className="fa-solid fa-location-pin" style={{color:'#ff2a74'}}></i> {hotel.city}, {hotel.region}</span>
+                    <span className="rating"><i className="fa-solid fa-star"></i> {hotel.rating}</span>
                   </div>
-                ))}
+                  <h3>{hotel.name}</h3>
+                  <p className="hotel-desc">{hotel.description}</p>
+                  <div className="price-row">
+                    <div className="price">₹{Number(hotel.price_per_night).toLocaleString('en-IN')} <span>/ night</span></div>
+                    <button className="btn-book" onClick={() => setSelectedHotel(hotel)}>Book Now</button>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        )}
+            ))
+          ) : (
+            <p className="no-results">No accommodations found matching your search destination.</p>
+          )}
+        </div>
       </main>
 
-      {/* 5. Detailed Hotel Pop-up with Guest Reviews & Increment Controls */}
+      {/* Booking & Payment Modal */}
       {selectedHotel && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <button style={styles.closeModalBtn} onClick={() => setSelectedHotel(null)}>✕</button>
-            <img src={selectedHotel.image} alt={selectedHotel.name} style={styles.modalImage} />
-            
-            <div style={styles.modalBody}>
-              <div style={styles.cardHeaderRow}>
-                <h2 style={styles.modalHotelName}>{selectedHotel.name}</h2>
-                <span style={styles.modalRating}>★ {selectedHotel.rating}</span>
-              </div>
-              <p style={styles.modalDescription}>{selectedHotel.description}</p>
-              <p style={styles.roomTypeInfo}>✨ <strong>Room Option:</strong> Signature Premium Luxury King Suite</p>
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <span className="close-btn" onClick={() => setSelectedHotel(null)}>&times;</span>
+            <h3>Book {selectedHotel.name}</h3>
+            <p>Enter your details and select your payment mode to complete reservation.</p>
+            <form className="modal-form" onSubmit={handleBookingSubmit}>
+              <input type="text" placeholder="Full Name" required value={fullName} onChange={(e)=>setFullName(e.target.value)} />
+              <input type="email" placeholder="Email Address" required value={email} onChange={(e)=>setEmail(e.target.value)} />
+              <input type="tel" placeholder="Phone Number" required value={phone} onChange={(e)=>setPhone(e.target.value)} />
+              <input type="password" placeholder="Create Password" required value={password} onChange={(e)=>setPassword(e.target.value)} />
               
-              {/* Reviews Integration */}
-              <div style={styles.reviewsContainer}>
-                <h4 style={styles.reviewTitle}>WELCOME😌</h4>
-                {(mockReviews[selectedHotel.id] || []).map((rev, idx) => (
-                  <div key={idx} style={styles.reviewItem}>
-                    <strong>{rev.user}:</strong> "{rev.text}"
-                  </div>
-                ))}
-              </div>
+              <label className="payment-label">Select Payment Mode:</label>
+              <select value={paymentMethod} onChange={(e)=>setPaymentMethod(e.target.value)}>
+                <option value="UPI">UPI (Google Pay / PhonePe / Paytm)</option>
+                <option value="Credit/Debit Card">Credit / Debit Card</option>
+                <option value="Net Banking">Net Banking</option>
+                <option value="Pay at Hotel">Pay at Hotel (Cash / Card on Arrival)</option>
+              </select>
 
-              <hr style={styles.divider} />
-              
-              <div style={styles.bookingControls}>
-                <div style={styles.counterSection}>
-                  <span style={styles.counterLabel}>Select Rooms:</span>
-                  <div style={styles.counterInterface}>
-                    <button style={styles.counterBtn} onClick={() => setRoomCount(prev => Math.max(1, prev - 1))} disabled={bookingSuccess}>-</button>
-                    <span style={styles.counterValue}>{roomCount}</span>
-                    <button style={styles.counterBtn} onClick={() => setRoomCount(prev => prev + 1)} disabled={bookingSuccess}>+</button>
-                  </div>
-                </div>
-                <div style={styles.priceCalculation}>
-                  <p style={styles.totalPriceLabel}>Total Pricing</p>
-                  <p style={styles.totalPriceValue}>₹{(selectedHotel.pricePerNight * roomCount).toLocaleString('en-IN')}</p>
-                </div>
-              </div>
-
-              {bookingSuccess ? (
-                <div style={styles.successMessage}>
-                  <strong>your room is booked 🤩🎊</strong>
-                </div>
-              ) : (
-                <button style={styles.bookNowBtn} onClick={handleBookClick}>
-                  {isLoggedIn ? "Proceed to Secure Checkout" : "Sign In to Book Stay"}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 6. Step 1 Gate: Sign In Modal */}
-      {showAuthModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.authModal}>
-            <button style={styles.closeModalBtn} onClick={() => setShowAuthModal(false)}>✕</button>
-            <h2 style={styles.authTitle}>Access Your Manzil</h2>
-            <p style={styles.authSubtitle}>Please sign in to your elite account to reserve suites.</p>
-            
-            <form onSubmit={handleLoginSubmit} style={styles.authForm}>
-              <input 
-                type="email" placeholder="Email Address" required value={authForm.email}
-                onChange={(e) => setAuthForm({...authForm, email: e.target.value})} style={styles.authInput}
-              />
-              <input 
-                type="password" placeholder="Password" required value={authForm.password}
-                onChange={(e) => setAuthForm({...authForm, password: e.target.value})} style={styles.authInput}
-              />
-              <button type="submit" style={styles.authSubmitBtn}>Login & Verify</button>
+              <button type="submit" className="btn-submit">
+                Confirm Reservation (₹{Number(selectedHotel.price_per_night).toLocaleString('en-IN')})
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* 7. Step 2 Gate: Luxury Payment Form Modal */}
-      {showPaymentModal && selectedHotel && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.authModal}>
-            <button style={styles.closeModalBtn} onClick={() => setShowPaymentModal(false)}>✕</button>
-            <h2 style={styles.authTitle}>Secure Checkout</h2>
-            <p style={styles.authSubtitle}>Finalize your payment of <strong>₹{(selectedHotel.pricePerNight * roomCount).toLocaleString('en-IN')}</strong></p>
-            
-            <form onSubmit={handlePaymentSubmit} style={styles.authForm}>
-              <input type="text" placeholder="Cardholder Name" required style={styles.authInput} />
-              <input type="text" placeholder="Card Number (#### #### #### ####)" maxLength="19" required style={styles.authInput} />
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input type="text" placeholder="MM/YY" maxLength="5" required style={{...styles.authInput, flex: 1}} />
-                <input type="password" placeholder="CVV" maxLength="3" required style={{...styles.authInput, flex: 1}} />
-              </div>
-              <button type="submit" style={styles.authSubmitBtn}>Authorize Payment</button>
-            </form>
+      {/* Special Occasions Section */}
+      <section className="occasions-section" id="occasions">
+        <h2 className="section-title" style={{color:'#fff'}}>Special Occasion Packages</h2>
+        <p className="occasions-subtitle">Explore bespoke venues and luxury stays for your celebrations.</p>
+        <div className="occasions-grid">
+          <div className="occasion-card" onClick={() => alert('Enquiring for Weddings!')}>
+            <i className="fa-solid fa-ring"></i>
+            <h3>Weddings</h3>
+            <p>Grand banquet halls & destination stay packages.</p>
+          </div>
+          <div className="occasion-card" onClick={() => alert('Enquiring for Birthdays!')}>
+            <i className="fa-solid fa-cake-candles"></i>
+            <h3>Birthdays</h3>
+            <p>Private party suites & customized event setups.</p>
+          </div>
+          <div className="occasion-card" onClick={() => alert('Enquiring for Engagements!')}>
+            <i className="fa-solid fa-wine-glass"></i>
+            <h3>Engagements</h3>
+            <p>Romantic arrangements with premium catering.</p>
+          </div>
+          <div className="occasion-card" onClick={() => alert('Enquiring for Anniversaries!')}>
+            <i className="fa-solid fa-heart"></i>
+            <h3>Anniversaries</h3>
+            <p>Candle-light dinners and relaxing spa suites.</p>
+          </div>
+          <div className="occasion-card" onClick={() => alert('Enquiring for Corporate Meets!')}>
+            <i className="fa-solid fa-briefcase"></i>
+            <h3>Corporate Meets</h3>
+            <p>Executive conference halls & team retreats.</p>
           </div>
         </div>
-      )}
+      </section>
 
-      {/* 8. Fully Customized Elegant Corporate Footer */}
-      <footer style={styles.footer}>
-        <div style={styles.footerContainer}>
-          <div style={styles.footerSection}>
-            <h3 style={styles.footerHeading}>Manzil Luxury Stays</h3>
-            <p style={styles.footerText}>Curating world-class elite hospitality experiences across premium destinations in India.</p>
-          </div>
-          <div style={styles.footerSection}>
-            <h3 style={styles.footerHeading}>Customer Care</h3>
-            <p style={styles.footerText}>📞 <strong>Phone:</strong> 1122334567</p>
-            <p style={styles.footerText}>✉️ <strong>Email:</strong> manzil@gmail.com</p>
-          </div>
-          <div style={styles.footerSection}>
-            <h3 style={styles.footerHeading}>Corporate</h3>
-            <p style={styles.footerText}> Developed by **SJEML group**.</p>
-          </div>
-        </div>
-        <div style={styles.footerBottom}>
-          © 2026 MANZIL INC. ALL RIGHTS RESERVED.
-          *made for practice*
-        </div>
+      <footer>
+        &copy; {new Date().getFullYear()} Manzil Booking Portal. All Rights Reserved. | Find Your Stay, Find Your Manzil.
       </footer>
-
     </div>
   );
 }

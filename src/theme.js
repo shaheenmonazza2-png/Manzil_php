@@ -186,15 +186,14 @@ export const premiumStyles = {
     fontStyle: 'italic',
     padding: '40px 0',
   },
-  resultsGrid: {
+  
+    resultsGrid: {
     display: 'grid',
-
-    gridTemplateColumns: 'repeat(3, 1fr)', 
+    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
     gap: '30px',
     width: '100%',
     marginTop: '20px',
   },
-    
   
   hotelCard: {
     backgroundColor: '#0a1128',
